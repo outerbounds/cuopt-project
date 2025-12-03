@@ -12,13 +12,14 @@ The flow:
 5. Produces a rich Metaflow card with visualizations
 """
 
-from metaflow import FlowSpec, step, card, Parameter, kubernetes, conda, current
+from metaflow import step, card, Parameter, kubernetes, conda, current
 from metaflow.profilers import gpu_profile
 from metaflow.cards import Markdown, Table, VegaChart
+from obproject import ProjectFlow
 import src
 
 
-class PortfolioOptimizationFlow(FlowSpec):
+class PortfolioOptimizationFlow(ProjectFlow):
     """
     GPU-accelerated portfolio optimization with CVaR risk measure.
 
