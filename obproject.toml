@@ -1,0 +1,4 @@
+platform = "dev-yellow.outerbounds.xyz"
+project = "portfolio_optim"
+title = "Portfolio optimization template"
+description = "A template for solving mathematical optimization and operations research problems on Outerbounds." 
