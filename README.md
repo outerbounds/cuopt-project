@@ -1,12 +1,14 @@
-# GPU Optimization with NVIDIA cuOpt on Outerbounds
+# GPU Optimization with NVIDIA cuOpt
 
-Five optimization problems solved with NVIDIA cuOpt on GPU, orchestrated by Metaflow on Outerbounds. Each flow is a real-world optimization problem expressed as a word problem.
+Optimization problems solved with [NVIDIA cuOpt](https://docs.nvidia.com/cuopt/user-guide) on GPU, orchestrated by [Metaflow](https://metaflow.org/).
 
 ## The Problems
 
 ### 1. Farm Planning (LP)
 
 > An agricultural company manages 10,000 farm regions. Each region can grow wheat, corn, soybeans, or cotton. Every region has its own land and water limits. Five shared labor pools serve all regions, and global market caps limit how much of each crop can be sold. **Maximize total profit by deciding how many acres of each crop to plant in each region.** Then sweep crop prices to test sensitivity.
+
+**Formulation:** 4 variables per region (acres of each crop). Per-region land and water constraints, global market caps per crop, and shared labor pool constraints. All constraints are `<=` inequalities on a sparse CSR matrix. Structure: 4n variables, 2n+9 constraints, 32n nonzeros — scales linearly in region count.
 
 **Flow:** `flows/lp-minimal/flow.py` | **Type:** Linear Program (40K variables, 20K constraints)
 
@@ -30,15 +32,36 @@ Five optimization problems solved with NVIDIA cuOpt on GPU, orchestrated by Meta
 
 ### 5. LP Solver Benchmark
 
-> Same farm planning problem as #1, run at 1K, 5K, 10K, 50K, and 100K regions with four solvers: cuOpt PDLP (GPU), OR-Tools PDLP (CPU), HiGHS Simplex, and HiGHS IPM. All solvers receive identical scipy CSR sparse input. **Isolates GPU vs CPU for the same algorithm (PDLP) and compares first-order methods against classical solvers.**
+> Same farm planning problem as #1, run at 1K–100K regions with four solvers: cuOpt PDLP (GPU), OR-Tools PDLP (CPU), HiGHS Simplex, and HiGHS IPM. All solvers receive identical scipy CSR sparse input. **Isolates GPU vs CPU for the same algorithm (PDLP) and compares first-order methods against classical solvers.**
 
 **Flow:** `flows/lp-benchmark/flow.py` | **Type:** LP scaling benchmark (4 solvers, 5 sizes, 20 tasks)
 
+## Benchmark Results
+
+At 100K regions (400K variables, 3.2M nonzeros), cuOpt on a single A10G GPU solves in **2.1 seconds**. The same PDLP algorithm on CPU (OR-Tools) takes 877 seconds — a **420x speedup** from GPU acceleration alone. Against classical CPU solvers, cuOpt is 303x faster than HiGHS Simplex and 174x faster than HiGHS IPM.
+
+The speedup grows with problem size. At 1K regions all solvers finish in under a second; by 100K regions the gap is three orders of magnitude.
+
+![Solve time comparison](scripts/benchmark_solve_times.png)
+![GPU speedup](scripts/benchmark_gpu_speedup.png)
+
+Regenerate these charts from the latest run: `python scripts/benchmark_charts.py`
+
+## Smoke Test: Energy Mix LP
+
+A quick validation that the cuOpt server deployment is working. Solves a small energy portfolio problem: find the cheapest mix of Solar ($50/MWh), Wind ($40), Gas ($70), and Nuclear ($90) to power a 1,000 MW city, subject to an emissions cap, budget limit, and minimum renewable requirement.
+
+The solver maxes out the two cheapest sources (Wind at 400 MW, Solar at 500 MW), fills the gap with 100 MW of Gas, and skips Nuclear entirely — total cost $48,000/hr. The visualization shows which variables hit their capacity bounds and which constraints are binding vs slack.
+
+![Energy mix result](scripts/energy_mix_result.png)
+
+Run it: `METAFLOW_PROFILE=yellow python scripts/smoke_test.py`
+
 ## Deployment Patterns
 
-Two ways to run cuOpt on Outerbounds — **per-step GPU** (each solve step gets its own GPU pod) and **persistent GPU server** (shared cuOpt REST API). All five flows above use per-step GPU. The `deployments/cuopt-server/` directory shows the server pattern. See [docs/deployment-patterns.md](docs/deployment-patterns.md) for details and when to use each.
+Two ways to run cuOpt — **batch over GPU fanout** (for example, in Metaflow each solve step gets its own GPU pod and some number of problem instances) and **persistent GPU server** (shared cuOpt REST API). All five flows above use per-step GPU. The `deployments/cuopt-server/` directory shows the server pattern in a way packaged for running as an [Outerbounds Deployment](https://docs.outerbounds.com/outerbounds/get-started-inference/), but you can run this on any GPU-enabled server. See [docs/deployment-patterns.md](docs/deployment-patterns.md) for details and when to use each.
 
-## Why Metaflow + Outerbounds
+## Why Metaflow?
 
 Each flow demonstrates practical patterns for running optimization on managed infrastructure:
 
@@ -55,18 +78,7 @@ The key point: **Metaflow handles the infrastructure** (GPU scheduling, dependen
 ## Quick Start
 
 ```bash
-cd cuopt-project
-./run_all.sh           # all flows
-./run_all.sh lp        # just farm planning
-./run_all.sh vrp       # just delivery routing
-./run_all.sh bench     # just LP solver benchmark
-```
-
-Or run individually:
-
-```bash
-PYTHONPATH="$PWD" METAFLOW_PROFILE=yellow \
-  python flows/lp-minimal/flow.py --environment=fast-bakery run
+PYTHONPATH="$PWD" python flows/lp-minimal/flow.py --environment=fast-bakery run
 ```
 
 ## Architecture
@@ -74,7 +86,6 @@ PYTHONPATH="$PWD" METAFLOW_PROFILE=yellow \
 ```
 cuopt-project/
 ├── obproject.toml              # Outerbounds project config
-├── run_all.sh                  # Runner script
 ├── src/
 │   ├── __init__.py             # METAFLOW_PACKAGE_POLICY = 'include'
 │   └── problems/
@@ -83,8 +94,9 @@ cuopt-project/
 ├── deployments/
 │   └── cuopt-server/
 │       └── config.yml          # Persistent GPU server (Outerbounds Deployment)
-├── figures/
-│   └── scaling_comparison.py   # Matplotlib figure from Metaflow artifacts
+├── scripts/
+│   ├── smoke_test.py           # Energy Mix LP smoke test + visualization
+│   └── benchmark_charts.py     # Regenerate benchmark charts from Metaflow artifacts
 └── flows/
     ├── lp-minimal/flow.py      # Farm planning LP
     ├── qp-minimal/flow.py      # Portfolio MAD LP
@@ -92,9 +104,3 @@ cuopt-project/
     ├── vrp-minimal/flow.py     # Delivery routing VRP (multi-scale)
     └── lp-benchmark/flow.py    # LP solver benchmark (4 solvers)
 ```
-
-## Compute
-
-- **GPU steps:** `gpu-multi-training` pool (A10G, 24GB VRAM)
-- **CPU steps:** `c5-2x-task` pool
-- **Conda:** cuOpt 25.08 from `rapidsai` and `nvidia` channels

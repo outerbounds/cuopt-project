@@ -77,9 +77,13 @@ class CuOptClient:
         while True:
             resp = requests.get(solution_url, headers=self.headers, timeout=30)
             if resp.status_code == 200:
-                return resp.json()
+                body = resp.json()
+                if 'response' in body:
+                    return body
+                # 200 but solver not done yet — keep polling
+                time.sleep(0.5)
             elif resp.status_code == 201:
-                time.sleep(0.1)
+                time.sleep(0.5)
             else:
                 resp.raise_for_status()
             if time.time() - t0 > time_limit + 30:
@@ -132,10 +136,11 @@ class CuOptClient:
         result = self._submit_and_poll(payload, time_limit)
         solve_time = time.time() - t0
 
-        resp = result.get('response', {})
+        solver_resp = result.get('response', {}).get('solver_response', {})
+        solution = solver_resp.get('solution', {})
         return {
-            'status': resp.get('status', 'unknown'),
-            'objective_value': resp.get('objective_value'),
-            'solution': resp.get('primal_solution'),
+            'status': solver_resp.get('status', 'unknown'),
+            'objective_value': solution.get('primal_objective'),
+            'solution': solution.get('primal_solution'),
             'solve_time': solve_time,
         }
