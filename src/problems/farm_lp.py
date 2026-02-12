@@ -42,30 +42,30 @@ def generate_farm_data(n_regions, price_mult=1.0, seed=42):
     np.random.seed(99)
     pool_usage = np.random.uniform(0.5, 2.0, (5, n_crops))
     np.random.set_state(saved_state)
-    pool_capacity = np.array([
-        pool_usage[k].sum() * 150.0 * n_regions for k in range(5)
-    ])
+    pool_capacity = np.array(
+        [pool_usage[k].sum() * 150.0 * n_regions for k in range(5)]
+    )
 
     market_cap = 200.0 * n_regions
     min_acres, max_acres = 10.0, 400.0
 
     return {
-        'n_regions': n_regions,
-        'n_crops': n_crops,
-        'n_vars': n_regions * n_crops,
-        'n_constraints': 2 * n_regions + n_crops + 5,
-        'nnz': 32 * n_regions,
-        'crops': crops,
-        'profit': profit,
-        'water_per_acre': water_per_acre,
-        'land_limit': land_limit,
-        'water_limit': water_limit,
-        'pool_usage': pool_usage,
-        'pool_capacity': pool_capacity,
-        'market_cap': market_cap,
-        'min_acres': min_acres,
-        'max_acres': max_acres,
-        'price_mult': price_mult,
+        "n_regions": n_regions,
+        "n_crops": n_crops,
+        "n_vars": n_regions * n_crops,
+        "n_constraints": 2 * n_regions + n_crops + 5,
+        "nnz": 32 * n_regions,
+        "crops": crops,
+        "profit": profit,
+        "water_per_acre": water_per_acre,
+        "land_limit": land_limit,
+        "water_limit": water_limit,
+        "pool_usage": pool_usage,
+        "pool_capacity": pool_capacity,
+        "market_cap": market_cap,
+        "min_acres": min_acres,
+        "max_acres": max_acres,
+        "price_mult": price_mult,
     }
 
 
@@ -77,11 +77,11 @@ def build_sparse_arrays(data):
     """
     from scipy import sparse
 
-    n_reg = data['n_regions']
-    n_crops = data['n_crops']
-    n_vars = data['n_vars']
-    water_per_acre = data['water_per_acre']
-    pool_usage = data['pool_usage']
+    n_reg = data["n_regions"]
+    n_crops = data["n_crops"]
+    n_vars = data["n_vars"]
+    water_per_acre = data["water_per_acre"]
+    pool_usage = data["pool_usage"]
 
     row_idx = np.arange(n_reg)
     rows, cols, vals = [], [], []
@@ -114,22 +114,24 @@ def build_sparse_arrays(data):
             cols.append(row_idx * n_crops + c)
             vals.append(np.full(n_reg, pool_usage[k, c]))
 
-    n_cons = data['n_constraints']
+    n_cons = data["n_constraints"]
     A = sparse.csr_matrix(
         (np.concatenate(vals), (np.concatenate(rows), np.concatenate(cols))),
         shape=(n_cons, n_vars),
     )
 
-    b = np.concatenate([
-        data['land_limit'],
-        data['water_limit'],
-        np.full(n_crops, data['market_cap']),
-        data['pool_capacity'],
-    ])
+    b = np.concatenate(
+        [
+            data["land_limit"],
+            data["water_limit"],
+            np.full(n_crops, data["market_cap"]),
+            data["pool_capacity"],
+        ]
+    )
 
-    c_maximize = data['profit'].ravel()
-    lb = np.full(n_vars, data['min_acres'])
-    ub = np.full(n_vars, data['max_acres'])
+    c_maximize = data["profit"].ravel()
+    lb = np.full(n_vars, data["min_acres"])
+    ub = np.full(n_vars, data["max_acres"])
 
     return A, b, c_maximize, lb, ub
 
@@ -157,7 +159,7 @@ def solve_with_ortools_pdlp(data):
     )
     build_time = time.time() - t0
 
-    solver = mbh.ModelSolverHelper('pdlp')
+    solver = mbh.ModelSolverHelper("pdlp")
     t1 = time.time()
     solver.solve(helper)
     solve_time = time.time() - t1
@@ -169,18 +171,20 @@ def solve_with_ortools_pdlp(data):
     total_profit = -solver.objective_value() if is_solved else None
 
     if is_solved and not status_str:
-        status_str = 'Optimal' if status_int == 0 else 'Feasible'
+        status_str = "Optimal" if status_int == 0 else "Feasible"
 
     return {
-        'status': 'Optimal' if status_int == 0 else (status_str or f'status={status_int}'),
-        'total_profit': total_profit,
-        'build_time': build_time,
-        'solve_time': solve_time,
-        'total_time': build_time + solve_time,
+        "status": (
+            "Optimal" if status_int == 0 else (status_str or f"status={status_int}")
+        ),
+        "total_profit": total_profit,
+        "build_time": build_time,
+        "solve_time": solve_time,
+        "total_time": build_time + solve_time,
     }
 
 
-def solve_with_scipy(data, method='highs'):
+def solve_with_scipy(data, method="highs"):
     """Solve farm LP with scipy/HiGHS. Measures build and solve time separately.
 
     method: 'highs' (auto simplex/IPM), 'highs-ds' (dual simplex), 'highs-ipm'
@@ -198,22 +202,22 @@ def solve_with_scipy(data, method='highs'):
     result = linprog(-c_max, A_ub=A, b_ub=b, bounds=bounds, method=method)
     solve_time = time.time() - t1
 
-    n_crops = data['n_crops']
+    n_crops = data["n_crops"]
     if result.success:
         total_profit = -result.fun
-        vals_2d = result.x.reshape(data['n_regions'], n_crops)
+        vals_2d = result.x.reshape(data["n_regions"], n_crops)
         crop_totals = {
-            data['crops'][c]: float(vals_2d[:, c].sum()) for c in range(n_crops)
+            data["crops"][c]: float(vals_2d[:, c].sum()) for c in range(n_crops)
         }
     else:
         total_profit = None
         crop_totals = {}
 
     return {
-        'status': 'Optimal' if result.success else result.message,
-        'total_profit': total_profit,
-        'crop_totals': crop_totals,
-        'build_time': build_time,
-        'solve_time': solve_time,
-        'total_time': build_time + solve_time,
+        "status": "Optimal" if result.success else result.message,
+        "total_profit": total_profit,
+        "crop_totals": crop_totals,
+        "build_time": build_time,
+        "solve_time": solve_time,
+        "total_time": build_time + solve_time,
     }

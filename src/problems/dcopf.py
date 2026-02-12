@@ -30,7 +30,9 @@ def build_ieee118_data():
 
     # Generator locations (representative buses) — ensure slack bus (0) has one
     other_buses = list(range(1, n_bus))
-    gen_buses = sorted([0] + np.random.choice(other_buses, n_gen - 1, replace=False).tolist())
+    gen_buses = sorted(
+        [0] + np.random.choice(other_buses, n_gen - 1, replace=False).tolist()
+    )
 
     # Generator cost coefficients ($/MWh) — typical range
     gen_cost = np.random.uniform(10, 80, n_gen)
@@ -139,7 +141,9 @@ def build_dcopf_lp_arrays(grid_data, demand_vector=None):
     gen_cost = np.array(grid_data["gen_cost"])
     gen_pmin = np.array(grid_data["gen_pmin"])
     gen_pmax = np.array(grid_data["gen_pmax"])
-    bus_load = np.array(demand_vector if demand_vector is not None else grid_data["bus_load"])
+    bus_load = np.array(
+        demand_vector if demand_vector is not None else grid_data["bus_load"]
+    )
 
     branches_from = grid_data["branches_from"]
     branches_to = grid_data["branches_to"]

@@ -19,9 +19,9 @@ import src
 
 
 CUOPT_CONDA = {
-    'rapidsai::cudf': '25.08.*',
-    'nvidia::cuopt-server': '25.08.*',
-    'nvidia::cuopt-sh-client': '25.08.*',
+    "rapidsai::cudf": "25.08.*",
+    "nvidia::cuopt-server": "25.08.*",
+    "nvidia::cuopt-sh-client": "25.08.*",
 }
 
 
@@ -91,14 +91,16 @@ class CuOptPortfolioFlow(ProjectFlow):
             mean_ret * 0.6, max_ret * 0.95, int(self.n_frontier_points)
         ).tolist()
 
-        print(f"Assets: {n}, Observations: {T}, Frontier points: {len(self.return_targets)}")
+        print(
+            f"Assets: {n}, Observations: {T}, Frontier points: {len(self.return_targets)}"
+        )
         print(f"Return range: [{min_ret:.2%}, {max_ret:.2%}]")
 
         self.next(self.solve_frontier)
 
     @conda(packages=CUOPT_CONDA)
     @gpu_profile(interval=1)
-    @kubernetes(gpu=1, compute_pool='gpu-multi-training')
+    @kubernetes(gpu=1, compute_pool="gpu-multi-training")
     @step
     def solve_frontier(self):
         """Solve MAD LP for each target return to build the efficient frontier.
@@ -135,16 +137,26 @@ class CuOptPortfolioFlow(ProjectFlow):
             # Portfolio weight variables: w_i in [0, 1]
             w = []
             for i in range(n):
-                w.append(problem.addVariable(
-                    lb=0.0, ub=1.0, vtype=CONTINUOUS, name=f"w_{i}",
-                ))
+                w.append(
+                    problem.addVariable(
+                        lb=0.0,
+                        ub=1.0,
+                        vtype=CONTINUOUS,
+                        name=f"w_{i}",
+                    )
+                )
 
             # Auxiliary variables for absolute deviations: d_t >= 0
             d = []
             for t in range(T):
-                d.append(problem.addVariable(
-                    lb=0.0, ub=1e6, vtype=CONTINUOUS, name=f"d_{t}",
-                ))
+                d.append(
+                    problem.addVariable(
+                        lb=0.0,
+                        ub=1e6,
+                        vtype=CONTINUOUS,
+                        name=f"d_{t}",
+                    )
+                )
 
             # Budget constraint: weights sum to 1
             problem.addConstraint(sum(w) == 1.0, name="budget")
@@ -180,37 +192,46 @@ class CuOptPortfolioFlow(ProjectFlow):
                 mad_annual = float(mad_daily * T)
                 approx_vol_annual = float(mad_daily * np.sqrt(np.pi / 2) * np.sqrt(T))
                 risk_free = 0.05
-                sharpe = ((port_return - risk_free) / approx_vol_annual
-                          if approx_vol_annual > 0 else 0)
+                sharpe = (
+                    (port_return - risk_free) / approx_vol_annual
+                    if approx_vol_annual > 0
+                    else 0
+                )
 
-                self.frontier.append({
-                    "target_return": target_return,
-                    "actual_return": port_return,
-                    "mad_risk": mad_annual,
-                    "approx_vol": approx_vol_annual,
-                    "sharpe": sharpe,
-                    "weights": weights.tolist(),
-                    "n_holdings": int(np.sum(weights > 0.001)),
-                    "solve_time": solve_time,
-                    "status": status,
-                    "n_vars": n + T,
-                    "n_constraints": 1 + 1 + 2 * T,
-                })
-                print(f"  Target {target_return:.2%}: vol={approx_vol_annual:.2%}, "
-                      f"sharpe={sharpe:.2f}, holdings={np.sum(weights > 0.001)}, "
-                      f"time={solve_time:.4f}s")
+                self.frontier.append(
+                    {
+                        "target_return": target_return,
+                        "actual_return": port_return,
+                        "mad_risk": mad_annual,
+                        "approx_vol": approx_vol_annual,
+                        "sharpe": sharpe,
+                        "weights": weights.tolist(),
+                        "n_holdings": int(np.sum(weights > 0.001)),
+                        "solve_time": solve_time,
+                        "status": status,
+                        "n_vars": n + T,
+                        "n_constraints": 1 + 1 + 2 * T,
+                    }
+                )
+                print(
+                    f"  Target {target_return:.2%}: vol={approx_vol_annual:.2%}, "
+                    f"sharpe={sharpe:.2f}, holdings={np.sum(weights > 0.001)}, "
+                    f"time={solve_time:.4f}s"
+                )
             else:
-                self.frontier.append({
-                    "target_return": target_return,
-                    "status": status,
-                    "solve_time": solve_time,
-                })
+                self.frontier.append(
+                    {
+                        "target_return": target_return,
+                        "status": status,
+                        "solve_time": solve_time,
+                    }
+                )
                 print(f"  Target {target_return:.2%}: {status}")
 
         self.next(self.build_card)
 
     @conda(disabled=True)
-    @card(type='blank')
+    @card(type="blank")
     @step
     def build_card(self):
         """Build visualization card."""
@@ -219,12 +240,14 @@ class CuOptPortfolioFlow(ProjectFlow):
         feasible = [p for p in self.frontier if p["status"] == "Optimal"]
 
         current.card.append(Markdown("# Portfolio Optimization (MAD LP)"))
-        current.card.append(Markdown(
-            f"**{len(self.expected_returns)} assets** | "
-            f"**{self.n_obs} observations** | "
-            f"**{len(self.frontier)} frontier points** | "
-            f"**Solver:** cuOpt LP (GPU)"
-        ))
+        current.card.append(
+            Markdown(
+                f"**{len(self.expected_returns)} assets** | "
+                f"**{self.n_obs} observations** | "
+                f"**{len(self.frontier)} frontier points** | "
+                f"**Solver:** cuOpt LP (GPU)"
+            )
+        )
 
         if not feasible:
             current.card.append(Markdown("No feasible solutions found."))
@@ -237,24 +260,35 @@ class CuOptPortfolioFlow(ProjectFlow):
         best_idx = int(np.argmax([p["sharpe"] for p in feasible]))
         chart_data = []
         for i, p in enumerate(feasible):
-            chart_data.append({
-                "risk": p["approx_vol"] * 100,
-                "return": p["actual_return"] * 100,
-                "sharpe": p["sharpe"],
-                "holdings": p["n_holdings"],
-                "optimal": bool(i == best_idx),
-            })
+            chart_data.append(
+                {
+                    "risk": p["approx_vol"] * 100,
+                    "return": p["actual_return"] * 100,
+                    "sharpe": p["sharpe"],
+                    "holdings": p["n_holdings"],
+                    "optimal": bool(i == best_idx),
+                }
+            )
 
         spec = {
             "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-            "width": 500, "height": 300,
+            "width": 500,
+            "height": 300,
             "data": {"values": chart_data},
             "layer": [
                 {
                     "mark": {"type": "line", "color": "#4C9878"},
                     "encoding": {
-                        "x": {"field": "risk", "type": "quantitative", "title": "Annualized Volatility (%)"},
-                        "y": {"field": "return", "type": "quantitative", "title": "Expected Return (%)"},
+                        "x": {
+                            "field": "risk",
+                            "type": "quantitative",
+                            "title": "Annualized Volatility (%)",
+                        },
+                        "y": {
+                            "field": "return",
+                            "type": "quantitative",
+                            "title": "Expected Return (%)",
+                        },
                     },
                 },
                 {
@@ -268,7 +302,11 @@ class CuOptPortfolioFlow(ProjectFlow):
                         },
                         "tooltip": [
                             {"field": "return", "title": "Return (%)", "format": ".2f"},
-                            {"field": "risk", "title": "Volatility (%)", "format": ".2f"},
+                            {
+                                "field": "risk",
+                                "title": "Volatility (%)",
+                                "format": ".2f",
+                            },
                             {"field": "sharpe", "title": "Sharpe", "format": ".2f"},
                             {"field": "holdings", "title": "Holdings"},
                         ],
@@ -294,42 +332,63 @@ class CuOptPortfolioFlow(ProjectFlow):
         weights = np.array(best["weights"])
         top_idx = np.argsort(weights)[-10:][::-1]
         holdings = [
-            [self.asset_names[i], f"{weights[i]:.2%}", f"{self.expected_returns[i]:.2%}"]
-            for i in top_idx if weights[i] > 0.001
+            [
+                self.asset_names[i],
+                f"{weights[i]:.2%}",
+                f"{self.expected_returns[i]:.2%}",
+            ]
+            for i in top_idx
+            if weights[i] > 0.001
         ]
         if holdings:
             current.card.append(Markdown("## Top Holdings"))
-            current.card.append(Table(holdings, headers=["Asset", "Weight", "Exp Return"]))
+            current.card.append(
+                Table(holdings, headers=["Asset", "Weight", "Exp Return"])
+            )
 
         # Problem size info
         current.card.append(Markdown("## Problem Structure"))
-        current.card.append(Markdown(
-            f"MAD portfolio LP with {len(self.expected_returns)} assets "
-            f"and {self.n_obs} return observations:\n"
-            f"- **Variables:** {best.get('n_vars', 'N/A')} "
-            f"({len(self.expected_returns)} weights + {self.n_obs} deviation vars)\n"
-            f"- **Constraints:** {best.get('n_constraints', 'N/A')} "
-            f"(budget + return target + 2x{self.n_obs} MAD)\n\n"
-            f"*Note: MAD (Mean Absolute Deviation) is an LP-formable alternative "
-            f"to Markowitz variance. cuOpt QP support available in 25.12+.*"
-        ))
+        current.card.append(
+            Markdown(
+                f"MAD portfolio LP with {len(self.expected_returns)} assets "
+                f"and {self.n_obs} return observations:\n"
+                f"- **Variables:** {best.get('n_vars', 'N/A')} "
+                f"({len(self.expected_returns)} weights + {self.n_obs} deviation vars)\n"
+                f"- **Constraints:** {best.get('n_constraints', 'N/A')} "
+                f"(budget + return target + 2x{self.n_obs} MAD)\n\n"
+                f"*Note: MAD (Mean Absolute Deviation) is an LP-formable alternative "
+                f"to Markowitz variance. cuOpt QP support available in 25.12+.*"
+            )
+        )
 
         # Frontier table
         current.card.append(Markdown("## Full Frontier"))
         rows = [
-            [f"{p['actual_return']:.2%}", f"{p['approx_vol']:.2%}",
-             f"{p['sharpe']:.2f}", f"{p['n_holdings']}", f"{p['solve_time']:.4f}s"]
+            [
+                f"{p['actual_return']:.2%}",
+                f"{p['approx_vol']:.2%}",
+                f"{p['sharpe']:.2f}",
+                f"{p['n_holdings']}",
+                f"{p['solve_time']:.4f}s",
+            ]
             for p in feasible
         ]
-        current.card.append(Table(rows, headers=["Return", "Volatility", "Sharpe", "Holdings", "Solve Time"]))
+        current.card.append(
+            Table(
+                rows,
+                headers=["Return", "Volatility", "Sharpe", "Holdings", "Solve Time"],
+            )
+        )
 
         # Solver performance
         total_time = sum(p["solve_time"] for p in feasible)
         current.card.append(Markdown("## Solver Performance"))
-        current.card.append(Markdown(
-            f"- **Total time:** {total_time:.2f}s for {len(feasible)} LP solves\n"
-            f"- **Average per solve:** {total_time / len(feasible):.4f}s"
-        ))
+        current.card.append(
+            Markdown(
+                f"- **Total time:** {total_time:.2f}s for {len(feasible)} LP solves\n"
+                f"- **Average per solve:** {total_time / len(feasible):.4f}s"
+            )
+        )
 
         self.next(self.end)
 
@@ -339,7 +398,9 @@ class CuOptPortfolioFlow(ProjectFlow):
         feasible = [p for p in self.frontier if p["status"] == "Optimal"]
         if feasible:
             best = max(feasible, key=lambda p: p["sharpe"])
-            print(f"Best Sharpe: {best['sharpe']:.2f} at {best['actual_return']:.2%} return")
+            print(
+                f"Best Sharpe: {best['sharpe']:.2f} at {best['actual_return']:.2%} return"
+            )
 
 
 if __name__ == "__main__":

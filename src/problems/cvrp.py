@@ -68,14 +68,14 @@ def generate_cvrp(n_customers, vehicle_capacity=100, seed=42):
     cost_matrix = np.sqrt(dx**2 + dy**2)
 
     return {
-        'name': f'cluster-{n_customers}',
-        'n_customers': n_customers,
-        'n_locations': n_locations,
-        'n_vehicles': n_vehicles,
-        'vehicle_capacity': vehicle_capacity,
-        'loc_x': loc_x,
-        'loc_y': loc_y,
-        'demands': demands,
-        'total_demand': total_demand,
-        'cost_matrix': cost_matrix,
+        "name": f"cluster-{n_customers}",
+        "n_customers": n_customers,
+        "n_locations": n_locations,
+        "n_vehicles": n_vehicles,
+        "vehicle_capacity": vehicle_capacity,
+        "loc_x": loc_x,
+        "loc_y": loc_y,
+        "demands": demands,
+        "total_demand": total_demand,
+        "cost_matrix": cost_matrix,
     }
