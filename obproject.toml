@@ -1,0 +1,4 @@
+platform = "dev-yellow.outerbounds.xyz"
+project = "cuopt_demos"
+title = "cuOpt GPU Optimization Demos"
+description = "NVIDIA cuOpt GPU optimization demos — LP, QP, MILP, and VRP fundamentals plus a parallel DC-OPF scenario sweep."

@@ -1,0 +1,45 @@
+name: cuopt-server
+port: 8000
+description: "NVIDIA cuOpt GPU optimization server (LP, MILP, VRP via REST)"
+
+# image: nvidia/cuopt:latest-cuda12.9-py3.13
+# no_deps: true
+
+# commands:
+#   - "echo '=== PATH ==='; echo $PATH; echo '=== which python ==='; which -a python3 python 2>/dev/null; echo '=== sys.path ==='; python3 -c 'import sys; print(sys.executable); print(sys.path)' 2>/dev/null; echo '=== find cuopt ==='; find / -name 'cuopt_service*' -maxdepth 6 2>/dev/null; find / -name 'cuopt_server' -type d -maxdepth 6 2>/dev/null; echo '=== pip list cuopt ==='; pip list 2>/dev/null | grep -i cuopt; echo '=== ls opt ==='; ls /opt/ 2>/dev/null; echo '=== ls conda ==='; ls /opt/conda/bin/ 2>/dev/null | head -20; echo '=== entrypoint ==='; cat /entrypoint.sh 2>/dev/null || cat /opt/nvidia/entrypoint.sh 2>/dev/null || echo 'no entrypoint found'; echo '=== dockerfile cmd ==='; cat /proc/1/cmdline 2>/dev/null | tr '\\0' ' '; echo; sleep 300"
+
+compute_pools:
+  - gpu-pool-inference-24gb
+
+dependencies:
+  conda:
+    rapidsai::cudf: '25.08.*'
+    nvidia::cuopt-server: '25.08.*'
+    nvidia::cuopt-sh-client: '25.08.*'
+
+commands:
+  - "python3 -m cuopt_server.cuopt_service --ip $CUOPT_SERVER_IP --port $CUOPT_SERVER_PORT"
+
+resources:
+  cpu: "4"
+  memory: "16Gi"
+  gpu: "1"
+
+replicas:
+  min: 1
+  max: 1
+
+environment:
+  CUOPT_SERVER_PORT: "8000"
+  CUOPT_SERVER_IP: "0.0.0.0"
+  CUOPT_SERVER_LOG_LEVEL: "info"
+
+# health_check:
+#   path: /cuopt/health
+#   initial_delay_seconds: 120
+#   timeout_seconds: 10
+#   period_seconds: 10
+#   failure_threshold: 12
+
+auth:
+  type: API
